@@ -1,0 +1,7 @@
+sequence_index,task_name,duration_minutes,machine_name,task_template_name,notes
+0,Cutting,3,Machine 0,Cutting,Initial cut
+1,Assembly,2,Machine 1,Assembly,Assemble parts
+2,Painting,2,Machine 2,Painting,Final paint
+3,Cutting,3,Machine 0,Cutting,Initial cut
+4,Assembly,2,Machine 1,Assembly,Assemble parts
+5,Painting,2,Machine 2,Painting,Final paint
