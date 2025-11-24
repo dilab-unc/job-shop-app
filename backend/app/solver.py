@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List
 
 from ortools.sat.python import cp_model
@@ -48,6 +48,8 @@ def solve_job_order(job_id: int, session: Session) -> SolverResult:
 
     all_tasks = {}
     machine_to_intervals: dict[int, list] = {}
+    # Track tasks by machine for sequence constraints
+    machine_to_tasks: dict[int, list] = {}
 
     for task in tasks:
         duration = task.custom_duration_minutes or (
@@ -71,18 +73,29 @@ def solve_job_order(job_id: int, session: Session) -> SolverResult:
         end = model.NewIntVar(0, horizon, f"end_{suffix}")
         interval = model.NewIntervalVar(start, duration, end, f"interval_{suffix}")
 
-        all_tasks[task.id] = (start, end, interval, duration, machine_id)
+        all_tasks[task.id] = (start, end, interval, duration, machine_id, task.sequence_index)
         machine_to_intervals.setdefault(machine_id, []).append(interval)
+        machine_to_tasks.setdefault(machine_id, []).append((task.id, task.sequence_index))
 
+    # Add no-overlap constraints for each machine (prevents conflicts on same machine)
     for machine_id, intervals in machine_to_intervals.items():
         model.AddNoOverlap(intervals)
 
-    sorted_task_ids = [task.id for task in tasks]
-    for prev, nxt in zip(sorted_task_ids, sorted_task_ids[1:]):
-        model.Add(all_tasks[nxt][0] >= all_tasks[prev][1])
+    # Add sequence constraints only for tasks on the same machine
+    # Tasks on different machines can run in parallel
+    for machine_id, task_list in machine_to_tasks.items():
+        # Sort tasks by sequence_index for this machine
+        sorted_machine_tasks = sorted(task_list, key=lambda x: x[1])
+        # Enforce sequence order: each task must start after the previous one ends
+        for i in range(len(sorted_machine_tasks) - 1):
+            prev_task_id = sorted_machine_tasks[i][0]
+            next_task_id = sorted_machine_tasks[i + 1][0]
+            model.Add(all_tasks[next_task_id][0] >= all_tasks[prev_task_id][1])
 
     obj_var = model.NewIntVar(0, horizon, "makespan")
-    model.AddMaxEquality(obj_var, [all_tasks[task_id][1] for task_id in sorted_task_ids])
+    # Get all task end times for makespan calculation
+    all_task_ids = [task.id for task in tasks]
+    model.AddMaxEquality(obj_var, [all_tasks[task_id][1] for task_id in all_task_ids])
     model.Minimize(obj_var)
 
     solver = cp_model.CpSolver()
@@ -114,8 +127,9 @@ def solve_job_order(job_id: int, session: Session) -> SolverResult:
 
     assignments: List[ScheduledTask] = []
     if schedule.status == "feasible":
-        start_time = datetime.utcnow()
-        for task_id, (start, end, _, duration, machine_id) in all_tasks.items():
+        start_time = datetime.now(timezone.utc)
+        for task_id, task_data in all_tasks.items():
+            start, end, _, duration, machine_id, _ = task_data
             assignments.append(
                 ScheduledTask(
                     job_task_id=task_id,
