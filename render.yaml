@@ -1,0 +1,39 @@
+# Render deployment configuration
+# This file can be used for Render Blueprint deployment
+# Or configure services manually in Render dashboard
+
+services:
+  - type: web
+    name: jobshop-backend
+    env: python
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: jobshop-db
+          property: connectionString
+      - key: DEBUG
+        value: False
+      - key: ECHO_SQL
+        value: False
+
+  - type: web
+    name: jobshop-frontend
+    env: python
+    buildCommand: pip install -r frontend/requirements.txt
+    startCommand: cd frontend && streamlit run streamlit_app.py --server.port $PORT --server.address 0.0.0.0
+    envVars:
+      - key: API_URL
+        fromService:
+          type: web
+          name: jobshop-backend
+          property: host
+        # You'll need to manually set this to: https://jobshop-backend.onrender.com/api
+
+databases:
+  - name: jobshop-db
+    plan: free
+    databaseName: jobshop
+    user: jobshop
+

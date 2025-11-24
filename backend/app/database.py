@@ -6,7 +6,13 @@ from sqlmodel import Session, SQLModel, create_engine
 from .config import get_settings
 
 settings = get_settings()
-engine = create_engine(settings.database_url, echo=settings.echo_sql)
+
+# Convert postgres:// to postgresql:// for SQLAlchemy compatibility
+database_url = settings.database_url
+if database_url and database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql://", 1)
+
+engine = create_engine(database_url, echo=settings.echo_sql)
 
 
 def init_db() -> None:

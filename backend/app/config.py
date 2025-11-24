@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings
@@ -8,9 +9,9 @@ class Settings(BaseSettings):
 
     app_name: str = "Job Shop Backend"
     api_prefix: str = "/api"
-    database_url: str = "sqlite:///./jobshop.db"
-    debug: bool = False
-    echo_sql: bool = False
+    database_url: str = os.getenv("DATABASE_URL", "sqlite:///./jobshop.db")
+    debug: bool = os.getenv("DEBUG", "False").lower() == "true"
+    echo_sql: bool = os.getenv("ECHO_SQL", "False").lower() == "true"
 
     class Config:
         env_file = ".env"
