@@ -9,7 +9,7 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).parent))
 
 from components import factories, job_orders, machines, schedules, task_templates
-from utils.api import API_URL
+from utils.api import get_api_url
 
 
 def main() -> None:
@@ -20,7 +20,10 @@ def main() -> None:
     if os.getenv("DEBUG", "false").lower() == "true" or os.getenv("API_URL"):
         with st.sidebar:
             st.caption("🔧 Debug Info")
-            st.text(f"API_URL: {API_URL}")
+            api_url = get_api_url()
+            env_api_url = os.getenv("API_URL", "NOT SET")
+            st.text(f"API_URL (env): {env_api_url}")
+            st.text(f"API_URL (resolved): {api_url}")
 
     (
         tab_factories,
