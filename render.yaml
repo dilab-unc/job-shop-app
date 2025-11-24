@@ -24,12 +24,11 @@ services:
     buildCommand: pip install -r frontend/requirements.txt
     startCommand: cd frontend && streamlit run streamlit_app.py --server.port $PORT --server.address 0.0.0.0
     envVars:
+      # IMPORTANT: Set API_URL manually in Render dashboard to your backend URL + /api
+      # Example: https://jobshop-backend.onrender.com/api
+      # The fromService property below may not work correctly, so set it manually:
       - key: API_URL
-        fromService:
-          type: web
-          name: jobshop-backend
-          property: host
-        # You'll need to manually set this to: https://jobshop-backend.onrender.com/api
+        value: ""  # Set this manually in Render dashboard after deployment
 
 databases:
   - name: jobshop-db

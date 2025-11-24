@@ -1,4 +1,5 @@
 """Main Streamlit application entry point."""
+import os
 import sys
 from pathlib import Path
 
@@ -8,11 +9,18 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).parent))
 
 from components import factories, job_orders, machines, schedules, task_templates
+from utils.api import API_URL
 
 
 def main() -> None:
     st.set_page_config(page_title="Job Shop App", layout="wide")
     st.title("Job Shop Scheduler")
+    
+    # Debug: Show API_URL in sidebar (only in production/debug mode)
+    if os.getenv("DEBUG", "false").lower() == "true" or os.getenv("API_URL"):
+        with st.sidebar:
+            st.caption("🔧 Debug Info")
+            st.text(f"API_URL: {API_URL}")
 
     (
         tab_factories,
