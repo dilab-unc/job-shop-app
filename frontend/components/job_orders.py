@@ -18,7 +18,7 @@ from utils.cache import (
     fetch_task_templates,
     refresh_cache,
 )
-from utils.api import api_post, api_put, api_delete, API_URL
+from utils.api import api_post, api_put, api_delete, get_api_url
 
 
 def render_job_orders_tab() -> None:
@@ -237,8 +237,9 @@ def _render_csv_import(job_id: int) -> None:
                     uploaded_file.seek(0)
                     file_content = uploaded_file.read()
                     files = {"file": (uploaded_file.name, file_content, "text/csv")}
+                    api_url = get_api_url()
                     resp = httpx.post(
-                        f"{API_URL}/job-orders/{job_id}/import-csv",
+                        f"{api_url}/job-orders/{job_id}/import-csv",
                         files=files,
                         timeout=30.0,
                         follow_redirects=True,
