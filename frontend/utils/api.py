@@ -1,13 +1,17 @@
 """API client utilities for communicating with the FastAPI backend."""
+import os
 from typing import Any
 
 import httpx
 import streamlit as st
 
-try:
-    API_URL = st.secrets.get("API_URL", "http://localhost:8000/api")
-except (FileNotFoundError, AttributeError):
-    API_URL = "http://localhost:8000/api"
+# Read API_URL from environment variable (for production) or Streamlit secrets (for local dev)
+API_URL = os.getenv("API_URL")
+if not API_URL:
+    try:
+        API_URL = st.secrets.get("API_URL", "http://localhost:8000/api")
+    except (FileNotFoundError, AttributeError, KeyError):
+        API_URL = "http://localhost:8000/api"
 
 
 def api_get(path: str, params: dict | None = None) -> list[dict[str, Any]]:
