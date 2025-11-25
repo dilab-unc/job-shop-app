@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, JSON
+from sqlalchemy import Column, DateTime, ForeignKey, JSON
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -102,6 +102,14 @@ class TaskTemplateRead(TaskTemplateBase):
     updated_at: datetime
 
 
+class ScheduleJobOrder(SQLModel, table=True):
+    """Association model for Schedule and JobOrder many-to-many relationship."""
+    __tablename__ = "schedule_job_orders"
+    
+    schedule_id: int = Field(foreign_key="schedules.id", primary_key=True)
+    job_order_id: int = Field(foreign_key="job_orders.id", primary_key=True)
+
+
 class JobOrderBase(SQLModel):
     name: str
     description: Optional[str] = None
@@ -124,7 +132,7 @@ class JobOrder(TimestampMixin, JobOrderBase, table=True):
     tasks: list["JobTask"] = Relationship(
         back_populates="job_order", sa_relationship_kwargs={"order_by": "JobTask.sequence_index"}
     )
-    schedules: list["Schedule"] = Relationship(back_populates="job_order")
+    schedules: list["Schedule"] = Relationship(back_populates="job_orders", link_model=ScheduleJobOrder)
 
 
 class JobOrderCreate(JobOrderBase):
@@ -187,15 +195,14 @@ class Schedule(TimestampMixin, ScheduleBase, table=True):
     __tablename__ = "schedules"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    job_id: int = Field(foreign_key="job_orders.id", nullable=False)
 
-    job_order: Optional[JobOrder] = Relationship(back_populates="schedules")
+    job_orders: list["JobOrder"] = Relationship(back_populates="schedules", link_model=ScheduleJobOrder)
     assignments: list["ScheduledTask"] = Relationship(back_populates="schedule")
 
 
 class ScheduleRead(ScheduleBase):
     id: int
-    job_id: int
+    job_order_ids: list[int]
     created_at: datetime
     updated_at: datetime
 

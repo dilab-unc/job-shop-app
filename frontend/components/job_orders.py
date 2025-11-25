@@ -492,57 +492,151 @@ def _render_run_solver(factory_id: int) -> None:
     
     if not jobs:
         st.warning(f"No job orders found. Please create a job order first.")
+        return
+    
+    # Mode selection: Single job or Multiple jobs
+    solve_mode = st.radio(
+        "Scheduling Mode",
+        options=["Single Job", "Multiple Jobs"],
+        horizontal=True,
+        help="Choose to schedule one job or multiple jobs together"
+    )
+    
+    st.markdown("---")
+    
+    if solve_mode == "Single Job":
+        _render_single_job_solver(jobs)
     else:
-        job_options = {job["name"]: job["id"] for job in jobs}
-        job_name = st.selectbox(
-            "Select Job Order to Solve",
-            options=list(job_options.keys()),
-            help="Choose a job order to generate an optimal schedule"
-        )
-        job_id = job_options[job_name]
-        
-        job_details = next(j for j in jobs if j["id"] == job_id)
-        tasks = fetch_job_tasks(job_id)
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Job Status", job_details.get("status", "unknown").upper())
-            st.metric("Task Count", len(tasks))
-        with col2:
-            makespan = job_details.get("makespan_minutes")
-            if makespan:
-                st.metric("Current Makespan", f"{makespan} min")
-            else:
-                st.metric("Current Makespan", "Not solved")
-            st.metric("Priority", job_details.get("priority", 0))
-        
-        if not tasks:
-            st.error("❌ This job order has no tasks. Add tasks before running the solver.")
+        _render_multiple_jobs_solver(jobs)
+
+
+def _render_single_job_solver(jobs: list[dict]) -> None:
+    """Render single job solver UI."""
+    job_options = {job["name"]: job["id"] for job in jobs}
+    job_name = st.selectbox(
+        "Select Job Order to Solve",
+        options=list(job_options.keys()),
+        help="Choose a job order to generate an optimal schedule"
+    )
+    job_id = job_options[job_name]
+    
+    job_details = next(j for j in jobs if j["id"] == job_id)
+    tasks = fetch_job_tasks(job_id)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Job Status", job_details.get("status", "unknown").upper())
+        st.metric("Task Count", len(tasks))
+    with col2:
+        makespan = job_details.get("makespan_minutes")
+        if makespan:
+            st.metric("Current Makespan", f"{makespan} min")
         else:
-            st.markdown("---")
-            st.info("💡 The solver will find an optimal schedule that minimizes the makespan (total completion time).")
-            
-            if st.button("🚀 Run Solver", type="primary", use_container_width=True):
-                with st.spinner("Solving... This may take a moment."):
-                    resp = api_post(f"/job-orders/{job_id}/solve", None)
-                    if resp.status_code in (200, 201):
-                        data = resp.json()
-                        status_emoji = "✅" if data.get("status") == "feasible" else "❌"
-                        st.success(
-                            f"{status_emoji} **Solver Status:** {data.get('solver_status', 'unknown').upper()}\n\n"
-                            f"**Objective Value (Makespan):** {data.get('objective_value', 'N/A')} minutes"
+            st.metric("Current Makespan", "Not solved")
+        st.metric("Priority", job_details.get("priority", 0))
+    
+    if not tasks:
+        st.error("❌ This job order has no tasks. Add tasks before running the solver.")
+    else:
+        st.markdown("---")
+        st.info("💡 The solver will find an optimal schedule that minimizes the makespan (total completion time).")
+        
+        if st.button("🚀 Run Solver", type="primary", use_container_width=True, key="solve_single"):
+            with st.spinner("Solving... This may take a moment."):
+                resp = api_post(f"/job-orders/{job_id}/solve", None)
+                if resp.status_code in (200, 201):
+                    data = resp.json()
+                    status_emoji = "✅" if data.get("status") == "feasible" else "❌"
+                    st.success(
+                        f"{status_emoji} **Solver Status:** {data.get('solver_status', 'unknown').upper()}\n\n"
+                        f"**Objective Value (Makespan):** {data.get('objective_value', 'N/A')} minutes"
+                    )
+                    if data.get("status") == "infeasible":
+                        st.error(
+                            "⚠️ **Infeasible Solution:** The solver could not find a valid schedule. "
+                            "Check machine capabilities, task durations, or constraints."
                         )
-                        if data.get("status") == "infeasible":
-                            st.error(
-                                "⚠️ **Infeasible Solution:** The solver could not find a valid schedule. "
-                                "Check machine capabilities, task durations, or constraints."
-                            )
-                        refresh_cache()
-                        st.rerun()
-                    else:
-                        try:
-                            error_detail = resp.json().get("detail", resp.text)
-                        except:
-                            error_detail = resp.text
-                        st.error(f"❌ Solver failed: {error_detail}")
+                    refresh_cache()
+                    st.rerun()
+                else:
+                    try:
+                        error_detail = resp.json().get("detail", resp.text)
+                    except:
+                        error_detail = resp.text
+                    st.error(f"❌ Solver failed: {error_detail}")
+
+
+def _render_multiple_jobs_solver(jobs: list[dict]) -> None:
+    """Render multiple jobs solver UI."""
+    st.info("💡 Schedule multiple job orders together. Tasks from different jobs can run in parallel on different machines, optimizing overall makespan.")
+    
+    # Filter jobs that have tasks
+    jobs_with_tasks = []
+    for job in jobs:
+        tasks = fetch_job_tasks(job["id"])
+        if tasks:
+            jobs_with_tasks.append(job)
+    
+    if not jobs_with_tasks:
+        st.error("❌ No job orders with tasks found. Add tasks to job orders before scheduling.")
+        return
+    
+    # Multi-select for job orders
+    job_options = {f"{job['name']} (ID: {job['id']}, {len(fetch_job_tasks(job['id']))} tasks)": job["id"] for job in jobs_with_tasks}
+    
+    selected_job_names = st.multiselect(
+        "Select Job Orders to Schedule Together",
+        options=list(job_options.keys()),
+        help="Select multiple job orders to schedule simultaneously. They must all be from the same factory."
+    )
+    
+    if not selected_job_names:
+        st.warning("Please select at least one job order to schedule.")
+        return
+    
+    selected_job_ids = [job_options[name] for name in selected_job_names]
+    
+    # Show summary
+    st.markdown("### Selected Jobs Summary")
+    summary_cols = st.columns(min(3, len(selected_job_ids)))
+    for idx, job_id in enumerate(selected_job_ids):
+        job = next(j for j in jobs if j["id"] == job_id)
+        tasks = fetch_job_tasks(job_id)
+        with summary_cols[idx % len(summary_cols)]:
+            st.metric(
+                job["name"],
+                f"{len(tasks)} tasks"
+            )
+    
+    st.markdown("---")
+    
+    if st.button("🚀 Run Batch Solver", type="primary", use_container_width=True, key="solve_batch"):
+        with st.spinner(f"Solving {len(selected_job_ids)} job orders together... This may take a moment."):
+            resp = api_post("/job-orders/solve-batch", selected_job_ids)
+            if resp.status_code in (200, 201):
+                data = resp.json()
+                status_emoji = "✅" if data.get("status") == "feasible" else "❌"
+                
+                job_order_ids = data.get("job_order_ids", [])
+                st.success(
+                    f"{status_emoji} **Solver Status:** {data.get('solver_status', 'unknown').upper()}\n\n"
+                    f"**Schedule ID:** {data.get('id')}\n"
+                    f"**Job Orders Scheduled:** {', '.join(map(str, job_order_ids))}\n"
+                    f"**Objective Value (Makespan):** {data.get('objective_value', 'N/A')} minutes"
+                )
+                if data.get("status") == "infeasible":
+                    st.error(
+                        "⚠️ **Infeasible Solution:** The solver could not find a valid schedule for the selected job orders. "
+                        "Check machine capabilities, task durations, or constraints."
+                    )
+                else:
+                    st.info(f"📊 View the schedule in the **Schedules** tab (Schedule ID: {data.get('id')})")
+                refresh_cache()
+                st.rerun()
+            else:
+                try:
+                    error_detail = resp.json().get("detail", resp.text)
+                except:
+                    error_detail = resp.text
+                st.error(f"❌ Batch solver failed: {error_detail}")
 

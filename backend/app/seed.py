@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlmodel import select
 
@@ -157,7 +157,7 @@ def seed_sample_data() -> None:
                 factory_id=factory.id,
                 name=payload["name"],
                 description="Auto-seeded demo job order.",
-                due_date=datetime.utcnow() + timedelta(days=7),
+                due_date=datetime.now(timezone.utc) + timedelta(days=7),
                 status="draft",
             )
             session.add(job)

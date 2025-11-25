@@ -22,7 +22,7 @@ def render_schedules_tab() -> None:
 
     if schedules:
         schedule_lookup = {
-            f"Schedule {s['id']} (Job: {s['job_id']}, Status: {s.get('status', 'unknown')})": s["id"]
+            f"Schedule {s['id']} (Jobs: {', '.join(map(str, s.get('job_order_ids', [])))}, Status: {s.get('status', 'unknown')})": s["id"]
             for s in schedules
         }
         sel = st.selectbox("Select schedule to visualize", options=list(schedule_lookup.keys()))

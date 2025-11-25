@@ -20,7 +20,7 @@ from app.models import (
     ScheduleRead,
     TaskTemplate,
 )
-from app.solver import solve_job_order
+from app.solver import solve_job_order, solve_job_orders
 
 
 router = APIRouter()
@@ -291,6 +291,48 @@ async def import_job_tasks_csv(job_id: int, file: UploadFile, session: SessionDe
     return add_job_tasks(job_id=job_id, tasks_in=tasks, session=session)
 
 
+@router.post("/solve-batch", response_model=ScheduleRead)
+def solve_jobs_batch(job_ids: List[int], session: SessionDep) -> ScheduleRead:
+    """Solve multiple job orders simultaneously in a single schedule.
+    
+    Tasks from different job orders can run in parallel on different machines.
+    Tasks within the same job order maintain their sequence constraints.
+    Returns a single schedule containing all job orders.
+    """
+    if not job_ids:
+        raise HTTPException(status_code=400, detail="At least one job order ID is required")
+    
+    try:
+        solver_result = solve_job_orders(job_ids=job_ids, session=session)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    # Persist the schedule (this will also persist the job order associations)
+    schedule = solver_result.schedule
+    session.add(schedule)
+    session.commit()
+    session.refresh(schedule)
+    
+    # Assign schedule_id to all assignments
+    for assignment in solver_result.assignments:
+        assignment.schedule_id = schedule.id
+        session.add(assignment)
+    session.commit()
+    
+    # Refresh to get relationships loaded
+    session.refresh(schedule)
+    job_order_ids = [job.id for job in schedule.job_orders]
+    return {
+        "id": schedule.id,
+        "status": schedule.status,
+        "objective_value": schedule.objective_value,
+        "solver_status": schedule.solver_status,
+        "job_order_ids": job_order_ids,
+        "created_at": schedule.created_at,
+        "updated_at": schedule.updated_at,
+    }
+
+
 @router.post("/{job_id}/solve", response_model=ScheduleRead)
 def solve_job(job_id: int, session: SessionDep) -> ScheduleRead:
     job = session.get(JobOrder, job_id)
@@ -307,7 +349,18 @@ def solve_job(job_id: int, session: SessionDep) -> ScheduleRead:
         assignment.schedule_id = schedule.id  # assign FK after schedule persisted
         session.add(assignment)
     session.commit()
-
-    return schedule
+    
+    # Refresh to load job_orders relationship
+    session.refresh(schedule)
+    job_order_ids = [job.id for job in schedule.job_orders]
+    return {
+        "id": schedule.id,
+        "status": schedule.status,
+        "objective_value": schedule.objective_value,
+        "solver_status": schedule.solver_status,
+        "job_order_ids": job_order_ids,
+        "created_at": schedule.created_at,
+        "updated_at": schedule.updated_at,
+    }
 
 
